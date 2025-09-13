@@ -1,2 +1,3 @@
 # SurgiVision
 SurgiVision is an end-to-end medical AI system that leverages 3D autoencoders for unsupervised anomaly detection in spleen CT scans. Our project demonstrates a complete pipeline from raw medical data processing to a deployable web interface. It is designed for identifying pathological conditions in spleen CT scans using deep learning.
+The system addresses a critical medical need: automated detection of spleen pathologies such as cysts, infarcts, lacerations, and masses. Current clinical practice relies on manual radiologist review, which is time-consuming and subject to variability
