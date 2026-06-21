@@ -54,6 +54,32 @@ def apply_spleen_mask(volume: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return masked
 
 
+def preprocess_raw_volume(
+    volume: np.ndarray,
+    target_size: tuple[int, int, int] = config.TARGET_SIZE,
+    crop_xy: int = 80,
+    crop_z: int = 40,
+) -> np.ndarray:
+    """Preprocess a raw CT volume that has **no** spleen mask.
+
+    HU-normalize, take a centered crop around the volume center, and resize to
+    ``target_size``. This is a coarse heuristic (no organ localization) used by
+    both the API and the Streamlit "upload without a matching mask" path; it is
+    not as reliable as the mask-based pipeline. Automatic spleen segmentation
+    (e.g. MONAI) is the planned replacement.
+    """
+    from scipy import ndimage
+
+    norm = normalize_hu(volume)
+    cx, cy, cz = (norm.shape[0] // 2, norm.shape[1] // 2, norm.shape[2] // 2)
+    xs, xe = max(0, cx - crop_xy // 2), min(norm.shape[0], cx + crop_xy // 2)
+    ys, ye = max(0, cy - crop_xy // 2), min(norm.shape[1], cy + crop_xy // 2)
+    zs, ze = max(0, cz - crop_z // 2), min(norm.shape[2], cz + crop_z // 2)
+    cropped = norm[xs:xe, ys:ye, zs:ze]
+    zoom = [target_size[i] / cropped.shape[i] for i in range(3)]
+    return ndimage.zoom(cropped, zoom, order=1).astype(np.float32)
+
+
 def to_model_tensor(masked_volume: np.ndarray, device: torch.device) -> torch.Tensor:
     """Convert a ``[D, H, W]`` array to a ``[1, 1, D, H, W]`` float tensor."""
     return torch.as_tensor(

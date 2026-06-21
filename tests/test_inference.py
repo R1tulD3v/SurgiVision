@@ -65,3 +65,11 @@ def test_decide_anomaly(error, threshold, expected):
 def test_decide_anomaly_zero_threshold_is_safe():
     d = inference.decide_anomaly(0.01, 0.0)
     assert d["confidence"] == 0.0
+
+
+def test_preprocess_raw_volume_shape_and_range():
+    vol = (np.random.default_rng(1).random((90, 90, 50)).astype(np.float32) * 500 - 200)
+    out = inference.preprocess_raw_volume(vol)
+    assert out.shape == (64, 64, 64)
+    assert out.min() >= 0.0
+    assert out.max() <= 1.0

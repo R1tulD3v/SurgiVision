@@ -15,6 +15,11 @@ nibabel>=5.2          # NIfTI (.nii/.nii.gz) medical volume I/O
 opencv-python>=4.9    # cv2 — 2D image resize / colormaps
 pillow>=10.2          # PIL — image handling
 
+# --- API service ---
+fastapi>=0.110        # REST inference service (api.py)
+uvicorn>=0.29         # ASGI server to run the API
+python-multipart>=0.0.9  # multipart/form-data file uploads for FastAPI
+
 # --- Web demo / visualization ---
 streamlit>=1.36       # interactive demo UI
 plotly>=5.22          # interactive 3D / heatmap plots
