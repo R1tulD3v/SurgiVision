@@ -34,16 +34,16 @@ def test_apply_spleen_mask_zeroes_outside(synthetic_volume, synthetic_mask):
     assert not np.shares_memory(masked, synthetic_volume)
 
 
-def test_reconstruction_error_map_shape_and_sign(model, synthetic_volume, device):
-    mse, emap = inference.reconstruction_error_map(model, synthetic_volume, device)
+def test_reconstruction_error_map_shape_and_sign(model, synthetic_volume, torch_device):
+    mse, emap = inference.reconstruction_error_map(model, synthetic_volume, torch_device)
     assert emap.shape == (64, 64, 64)
     assert mse >= 0.0
     assert float(emap.min()) >= 0.0  # abs error is non-negative (not random noise)
 
 
-def test_scalar_error_matches_map(model, synthetic_volume, device):
-    mse_only = inference.reconstruction_error(model, synthetic_volume, device)
-    mse_pair, _ = inference.reconstruction_error_map(model, synthetic_volume, device)
+def test_scalar_error_matches_map(model, synthetic_volume, torch_device):
+    mse_only = inference.reconstruction_error(model, synthetic_volume, torch_device)
+    mse_pair, _ = inference.reconstruction_error_map(model, synthetic_volume, torch_device)
     assert np.isclose(mse_only, mse_pair)
 
 

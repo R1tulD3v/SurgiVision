@@ -12,16 +12,18 @@ from spleen_3d_model import Spleen3DAutoencoder
 
 
 @pytest.fixture(scope="session")
-def device() -> torch.device:
+def torch_device() -> torch.device:
     # Tests run on CPU for determinism and portability.
+    # (Named torch_device, not device, to avoid clashing with
+    # pytest-playwright's own `device` fixture used by the e2e tests.)
     return torch.device("cpu")
 
 
 @pytest.fixture(scope="session")
-def model(device):
+def model(torch_device):
     """A freshly-initialized (untrained) autoencoder in eval mode."""
     inference.set_global_seed(0)
-    net = Spleen3DAutoencoder().to(device)
+    net = Spleen3DAutoencoder().to(torch_device)
     net.eval()
     return net
 
