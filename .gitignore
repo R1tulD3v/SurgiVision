@@ -1,0 +1,55 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Data & model artifacts (large; keep out of version control) ----
+data/
+models/
+*.pth
+*.pt
+*.onnx
+*.nii
+*.nii.gz
+
+# ---- Generated plots / reports ----
+presentation_plots/
+model_analysis_plots/
+*_plots/
+*.pdf
+
+# ---- Notebooks ----
+.ipynb_checkpoints/
+
+# ---- Tooling caches ----
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Secrets / local env ----
+.env
+*.env
+!.env.example
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---- Temporary helper files ----
+.pr_body.md
+.create_pr.py

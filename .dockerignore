@@ -1,0 +1,30 @@
+.git
+.gitignore
+.github
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Large artifacts (mount at runtime instead of baking into the image)
+data/
+models/
+results/
+*.pth
+*.pt
+*.onnx
+*.nii
+*.nii.gz
+
+# Dev-only
+tests/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+requirements-dev.txt
+
+# Secrets / local
+.env
+.pr_body.md
+.create_pr.py
