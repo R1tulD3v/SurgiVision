@@ -33,6 +33,8 @@ model_analysis_plots/
 
 # ---- Tooling caches ----
 .pytest_cache/
+.playwright-mcp/
+phase1-mcp-verification.png
 .coverage
 coverage.xml
 htmlcov/
