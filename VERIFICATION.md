@@ -70,3 +70,38 @@ dataset at `data/Task09_Spleen/` (or set `SURGIVISION_MODELS_DIR` /
 | E2E (Playwright) | ✅ 4 passed against live app (title, header, model-state, no JS errors) |
 | App boots | ✅ renders header + correct config-resolved model path |
 | Manual (with model) | ⏳ to be done locally by the maintainer |
+
+## Optional — Playwright MCP (interactive AI-driven browser checks)
+
+The deterministic `tests/e2e/` suite above is the repeatable/CI artifact. For
+*interactive* browser checks (let the assistant click around and inspect the
+live app), this repo also ships an MCP config.
+
+**Prerequisite:** Node.js ≥ 18 (`node --version`).
+
+**What's in the repo:** [`.mcp.json`](.mcp.json) registers Microsoft's official
+Playwright MCP server (`@playwright/mcp`).
+
+**Connect (run in your own terminal, from the repo root):**
+```bash
+claude mcp list                 # should show "playwright"
+claude                          # start an interactive session, then run:
+# /mcp                          # approve + connect "playwright" (status should be ✓)
+```
+First browser use may auto-download Chromium; otherwise: `npx playwright install chromium`.
+
+**Use it:** start the app (`python -m streamlit run streamlit_universal_demo.py
+--server.port 8765`), then ask the assistant to navigate to
+`http://127.0.0.1:8765` and snapshot/inspect it via the `mcp__playwright__*` tools.
+
+**Windows fallback:** if `npx` doesn't launch directly on native Windows, change
+`.mcp.json` to wrap it in `cmd`:
+```json
+{ "mcpServers": { "playwright": {
+  "command": "cmd",
+  "args": ["/c", "npx", "-y", "@playwright/mcp@latest"]
+} } }
+```
+
+**Security:** project-scoped MCP servers prompt for approval before first run —
+keep that gate on, and only add servers from trusted sources.
