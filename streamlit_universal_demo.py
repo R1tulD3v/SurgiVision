@@ -117,6 +117,49 @@ def load_anomaly_detector():
         return None, False
 
 
+@st.cache_resource
+def _load_segmenter():
+    """Load the MONAI spleen segmenter once, or None if unavailable."""
+    try:
+        from segmentation import SpleenSegmenter
+
+        return SpleenSegmenter()
+    except Exception:
+        return None
+
+
+def _try_segmentation(detector, temp_path, threshold):
+    """Attempt mask-free analysis via MONAI auto-segmentation. Returns a result
+    dict, or None to fall back to the coarse heuristic."""
+    seg = _load_segmenter()
+    if seg is None:
+        return None
+    try:
+        with st.spinner("Auto-segmenting spleen with MONAI (CPU, ~30-60s)…"):
+            mask, hu = seg.segment(temp_path)
+            vol, mask64 = inference.crop_and_resize_to_spleen(hu, mask)
+        if vol is None:
+            return None
+        masked = inference.apply_spleen_mask(vol, mask64)
+        err, error_map = inference.reconstruction_error_map(detector.model, masked, detector.device)
+        decision = inference.decide_anomaly(err, threshold)
+        st.success("Spleen auto-localized (MONAI UNet) — reliable mask-based analysis.")
+        return {
+            'is_anomaly': decision['is_anomaly'],
+            'confidence': decision['confidence'],
+            'reconstruction_error': err,
+            'threshold': threshold,
+            'original_shape': hu.shape,
+            'processed_volume': masked,
+            'error_map': error_map,
+            'image_type': '3D',
+            'method_used': 'monai_segmentation',
+        }
+    except Exception as e:
+        st.info(f"Segmentation unavailable ({e}); using fallback.")
+        return None
+
+
 def validate_upload(uploaded_file):
     """Lightweight validation of an uploaded file (extension + size cap).
 
@@ -178,7 +221,12 @@ def process_3d_nifti(uploaded_file, detector, threshold):
                         'image_type': '3D',
                         'method_used': 'training_pipeline_with_mask'
                     }
-        st.warning("No matching training file found. Processing without spleen mask.")
+        # No dataset match: try automatic MONAI spleen segmentation (mask-free).
+        seg_result = _try_segmentation(detector, temp_path, threshold)
+        if seg_result is not None:
+            os.unlink(temp_path)
+            return seg_result
+        st.warning("No dataset match and segmentation unavailable — coarse mask-free heuristic.")
         st.info("Mixed-tissue volumes usually elevate error vs spleen-only model.")
         nii_img = nib.load(temp_path)
         volume_data = nii_img.get_fdata()
