@@ -73,3 +73,21 @@ def test_preprocess_raw_volume_shape_and_range():
     assert out.shape == (64, 64, 64)
     assert out.min() >= 0.0
     assert out.max() <= 1.0
+
+
+def test_crop_and_resize_to_spleen():
+    vol = (np.random.default_rng(2).random((90, 90, 60)).astype(np.float32) * 500 - 200)
+    mask = np.zeros((90, 90, 60), dtype=np.uint8)
+    mask[30:60, 30:60, 20:40] = 1  # a cuboid "spleen"
+    out_vol, out_mask = inference.crop_and_resize_to_spleen(vol, mask)
+    assert out_vol.shape == (64, 64, 64)
+    assert out_mask.shape == (64, 64, 64)
+    assert out_vol.min() >= 0.0 and out_vol.max() <= 1.0
+    assert (out_mask > 0).sum() > 0
+
+
+def test_crop_and_resize_empty_mask_returns_none():
+    vol = np.zeros((32, 32, 32), dtype=np.float32)
+    mask = np.zeros((32, 32, 32), dtype=np.uint8)
+    v, m = inference.crop_and_resize_to_spleen(vol, mask)
+    assert v is None and m is None
