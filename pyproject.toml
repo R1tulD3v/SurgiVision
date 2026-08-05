@@ -1,0 +1,25 @@
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["models", "data", "results"]
+
+[tool.ruff.lint]
+# Focused, high-signal rule set: pyflakes (F), import sorting (I),
+# pycodestyle errors/warnings (E/W). Kept pragmatic for a research codebase.
+select = ["E", "F", "I", "W"]
+ignore = [
+    "E501",  # line length — not enforced (long f-strings / HTML in the demo)
+    "E402",  # module import not at top — a couple of in-function imports are intentional
+    "E722",  # bare except — present in legacy error-handling paths
+    "E741",  # ambiguous variable names (e.g. l) in legacy code
+    "E702",  # multiple statements on one line (compact coordinate math in the demo)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "inference", "data_splits"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = false
+warn_unused_ignores = false

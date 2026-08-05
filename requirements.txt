@@ -1,0 +1,29 @@
+# SurgiVision runtime dependencies.
+# Version floors reflect what the project was developed/verified against.
+# Use a virtual environment:  python -m venv .venv && pip install -r requirements.txt
+#
+# Note: PyTorch wheels are platform/CUDA specific. For a CPU-only install you may
+# prefer:  pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# --- Deep learning ---
+torch>=2.4
+
+# --- Numerical / imaging core ---
+numpy>=1.26
+scipy>=1.11
+nibabel>=5.2          # NIfTI (.nii/.nii.gz) medical volume I/O
+opencv-python>=4.9    # cv2 — 2D image resize / colormaps
+pillow>=10.2          # PIL — image handling
+
+# --- Web demo / visualization ---
+streamlit>=1.36       # interactive demo UI
+plotly>=5.22          # interactive 3D / heatmap plots
+
+# --- Reporting ---
+reportlab>=4.1        # PDF report generation
+
+# --- Analysis / metrics ---
+scikit-learn>=1.4     # ROC/AUC, precision/recall, confusion matrix
+pandas>=2.2
+matplotlib>=3.8
+seaborn>=0.13

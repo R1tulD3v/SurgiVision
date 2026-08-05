@@ -1,106 +1,37 @@
+import os
+import tempfile
+from datetime import datetime
+from io import BytesIO
+from pathlib import Path
+
+import cv2
+import nibabel as nib
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 import torch
-import numpy as np
-import nibabel as nib
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
-from pathlib import Path
-import tempfile
-import os
 from PIL import Image
-import cv2
-from spleen_anomaly_detector_fixed import Spleen3DAnomalyDetectorFixed
-from enhanced_anomaly_creator import MedicalAnomalyCreator
-from datetime import datetime
-from io import BytesIO
-
-from reportlab.lib.pagesizes import A4
+from PIL import Image as PILImage
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from io import BytesIO
-from datetime import datetime
+from reportlab.platypus import (
+    Image as RLImage,
+)
+from reportlab.platypus import (
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
-def create_pdf_bytes(patient_name, result, preview_img=None, heat_img=None):
-    """
-    Generate SurgiVision PDF report and return as bytes.
-    """
-
-    buf = BytesIO()
-    doc = SimpleDocTemplate(
-        buf,
-        pagesize=A4,
-        leftMargin=18*mm,
-        rightMargin=18*mm,
-        topMargin=22*mm,
-        bottomMargin=18*mm
-    )
-
-    styles = getSampleStyleSheet()
-    style_normal = styles["Normal"]
-    style_small = ParagraphStyle('Small', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#6b7280'))
-
-    elements = []
-
-    # ---- Title ----
-    elements.append(Paragraph("🩺 SurgiVision - Patient Report", styles['Title']))
-    elements.append(Spacer(1, 12))
-
-    # ---- Patient info ----
-    elements.append(Paragraph(f"<b>Patient Name:</b> {patient_name}", style_normal))
-    elements.append(Paragraph(f"<b>Date:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", style_normal))
-    elements.append(Spacer(1, 12))
-
-    # ---- Results header ----
-    section_data = [[Paragraph("<b>📊 Analysis Results</b>", style_normal)]]
-    section_table = Table(section_data, colWidths=[480])
-    section_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#E5E9EB")),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTSIZE', (0, 0), (-1, -1), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-    ]))
-    elements.append(section_table)
-    elements.append(Spacer(1, 12))
-
-    # ---- Results ----
-    anomaly_text = "🚨 Anomaly Detected" if result['is_anomaly'] else "✅ Normal Pattern"
-    elements.append(Paragraph(f"<b>Status:</b> {anomaly_text}", style_normal))
-    elements.append(Paragraph(f"<b>Reconstruction Error:</b> {result['reconstruction_error']:.6f}", style_normal))
-    elements.append(Paragraph(f"<b>Threshold:</b> {result['threshold']:.6f}", style_normal))
-    elements.append(Paragraph(f"<b>Confidence Level:</b> {result['confidence']:.2f}x", style_normal))
-
-    if 'pathology_type' in result:
-        elements.append(Spacer(1, 12))
-        elements.append(Paragraph(f"<b>Pathology Type:</b> {result['pathology_type']}", style_normal))
-        elements.append(Paragraph(f"<b>Description:</b> {result['description']}", style_normal))
-
-    elements.append(Spacer(1, 24))
-    elements.append(Paragraph("⚠ <b>Disclaimer:</b> This report is AI-generated and must be reviewed by a certified radiologist.", style_small))
-
-    # ---- Header & Footer ----
-    def add_header_footer(canvas, doc):
-        canvas.saveState()
-        # Header
-        canvas.setFont('Helvetica-Bold', 14)
-        canvas.setFillColor(colors.HexColor("#003366"))
-        canvas.drawString(40, A4[1] - 40, "SurgiVision - Advanced Medical Imaging")
-        # Footer
-        canvas.setFont('Helvetica', 8)
-        canvas.setFillColor(colors.grey)
-        canvas.drawString(40, 30, f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        canvas.drawRightString(A4[0] - 40, 30, f"Page {doc.page}")
-        canvas.restoreState()
-
-    doc.build(elements, onFirstPage=add_header_footer, onLaterPages=add_header_footer)
-    pdf_bytes = buf.getvalue()
-    buf.close()
-    return pdf_bytes
-
+import config
+import inference
+from enhanced_anomaly_creator import MedicalAnomalyCreator
+from spleen_anomaly_detector_fixed import Spleen3DAnomalyDetectorFixed
 
 st.set_page_config(
     page_title="SurgiVision - Medical Image Analysis",
@@ -178,12 +109,29 @@ st.markdown("""
 
 @st.cache_resource
 def load_anomaly_detector():
-    model_path = "../models/best_spleen_3d_autoencoder.pth"
+    model_path = config.AUTOENCODER_PATH
     if Path(model_path).exists():
-        detector = Spleen3DAnomalyDetectorFixed(model_path)
+        detector = Spleen3DAnomalyDetectorFixed(str(model_path))
         return detector, True
     else:
         return None, False
+
+
+def validate_upload(uploaded_file):
+    """Lightweight validation of an uploaded file (extension + size cap).
+
+    Returns ``(ok, message)`` where ``message`` is an error on failure or the
+    human-readable size on success. Defense-in-depth on top of the uploader's
+    own ``type`` filter.
+    """
+    name = uploaded_file.name.lower()
+    if not name.endswith(config.ALLOWED_UPLOAD_EXTENSIONS):
+        allowed = ", ".join(config.ALLOWED_UPLOAD_EXTENSIONS)
+        return False, f"Unsupported file type. Allowed: {allowed}"
+    size_mb = len(uploaded_file.getvalue()) / (1024 * 1024)
+    if size_mb > config.MAX_UPLOAD_MB:
+        return False, f"File too large ({size_mb:.1f} MB). Limit is {config.MAX_UPLOAD_MB} MB."
+    return True, f"{size_mb:.1f} MB"
 
 def process_3d_nifti(uploaded_file, detector, threshold):
     try:
@@ -214,8 +162,10 @@ def process_3d_nifti(uploaded_file, detector, threshold):
                 mask_path = detector.preprocessor.label_files[matching_idx]
                 volume, mask = detector.preprocessor.preprocess_spleen_volume(volume_path, mask_path)
                 if volume is not None:
-                    spleen_volume = volume * (mask > 0)
-                    error_map = np.random.random((64, 64, 64)) * 0.001
+                    spleen_volume = inference.apply_spleen_mask(volume, mask)
+                    _, error_map = inference.reconstruction_error_map(
+                        detector.model, spleen_volume, detector.device
+                    )
                     os.unlink(temp_path)
                     return {
                         'is_anomaly': result['is_anomaly'],
@@ -232,8 +182,7 @@ def process_3d_nifti(uploaded_file, detector, threshold):
         st.info("Mixed-tissue volumes usually elevate error vs spleen-only model.")
         nii_img = nib.load(temp_path)
         volume_data = nii_img.get_fdata()
-        volume_windowed = np.clip(volume_data, -200, 300)
-        volume_norm = (volume_windowed + 200) / 500
+        volume_norm = inference.normalize_hu(volume_data)
         cx, cy, cz = volume_norm.shape[0]//2, volume_norm.shape[1]//2, volume_norm.shape[2]//2
         crop_size = 80
         xs = max(0, cx - crop_size//2); xe = min(volume_norm.shape[0], cx + crop_size//2)
@@ -249,7 +198,7 @@ def process_3d_nifti(uploaded_file, detector, threshold):
         with torch.no_grad():
             reconstructed = detector.model(volume_tensor)
             reconstruction_error = torch.mean((volume_tensor - reconstructed) ** 2).item()
-        adjusted_threshold = threshold * 5.0
+        adjusted_threshold = threshold * config.MIXED_TISSUE_THRESHOLD_MULTIPLIER
         is_anomaly = reconstruction_error > adjusted_threshold
         confidence = reconstruction_error / adjusted_threshold
         error_map = torch.abs(volume_tensor - reconstructed).squeeze().cpu().numpy()
@@ -282,6 +231,11 @@ def process_2d_image(image_file, detector, threshold):
             image = image.convert('L')
         img_array = np.array(image)
         st.success(f"Loaded 2D image: {img_array.shape}")
+        st.warning(
+            "Note: this 2D path is a non-clinical demo. The model is trained on "
+            "3D spleen CT volumes, so a stacked 2D image is out-of-distribution "
+            "and results are not medically meaningful."
+        )
         img_normalized = img_array.astype(np.float32) / 255.0
         img_resized = cv2.resize(img_normalized, (64, 64))
         volume_3d = np.stack([img_resized] * 64, axis=2)
@@ -294,7 +248,7 @@ def process_2d_image(image_file, detector, threshold):
         with torch.no_grad():
             reconstructed = detector.model(volume_tensor)
             reconstruction_error = torch.mean((volume_tensor - reconstructed) ** 2).item()
-        adjusted_threshold = threshold * 10.0
+        adjusted_threshold = threshold * config.IMAGE_2D_THRESHOLD_MULTIPLIER
         is_anomaly = reconstruction_error > adjusted_threshold
         confidence = reconstruction_error / adjusted_threshold
         error_map = torch.abs(volume_tensor - reconstructed).squeeze().cpu().numpy()
@@ -439,17 +393,6 @@ def slice_preview_from_error(err):
 
 
 
-from io import BytesIO
-from datetime import datetime
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-from reportlab.lib import colors
-from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
-                                TableStyle, Image as RLImage, PageBreak)
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.pdfbase.pdfmetrics import stringWidth
-from PIL import Image as PILImage, ImageOps
-
 def generate_pdf_bytes(app_title, patient, result, preview_img=None, heat_img=None, logo_path=None):
     """
     Generate a polished, professional PDF report for medical image anomaly detection.
@@ -477,7 +420,6 @@ def generate_pdf_bytes(app_title, patient, result, preview_img=None, heat_img=No
         style_h2 = ParagraphStyle("Heading2", parent=styles["Heading2"], fontSize=14, leading=18, textColor=colors.HexColor("#003366"))
         style_section_header = ParagraphStyle("SectHeader", fontSize=12, leading=14, textColor=colors.HexColor("#0073b7"), spaceBefore=12, spaceAfter=6, underlineWidth=1, underlineOffset=-2, underlineColor=colors.HexColor("#0073b7"))
         style_normal = styles["Normal"]
-        style_bold = ParagraphStyle("Bold", parent=styles["Normal"], fontName="Helvetica-Bold")
         style_small_muted = ParagraphStyle("muted", parent=styles["Normal"], fontSize=8, textColor=colors.HexColor("#6b7280"))
         style_error = ParagraphStyle("Error", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=12, textColor=colors.HexColor("#d62728"))
         style_ok = ParagraphStyle("Ok", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=12, textColor=colors.HexColor("#2ca02c"))
@@ -582,7 +524,7 @@ def generate_pdf_bytes(app_title, patient, result, preview_img=None, heat_img=No
         # --- Clinical Impression ---
         impression_lines = []
         if result.get('is_anomaly'):
-            impression_lines.append("1. Anomally detected, critical situation existence-immediate surveillance required.")
+            impression_lines.append("1. Anomaly detected; clinical correlation and prompt radiologist review advised.")
             if 'pathology_type' in result:
                 impression_lines.append(f"2. Pattern consistent with <i>{result['pathology_type']}</i>: {result.get('description', '')}")
         else:
@@ -630,7 +572,6 @@ def generate_pdf_bytes(app_title, patient, result, preview_img=None, heat_img=No
             canvas.drawString(18*mm, footer_y, "Confidential - For Clinical Decision Support Only")
             canvas.drawCentredString(A4[0]/2, footer_y, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             page_number_text = f"Page {doc.page}"
-            w = stringWidth(page_number_text, "Helvetica", 7)
             canvas.drawRightString(A4[0] - 18*mm, footer_y, page_number_text)
             canvas.restoreState()
 
@@ -647,8 +588,8 @@ def generate_pdf_bytes(app_title, patient, result, preview_img=None, heat_img=No
 
 
 def main():
-    
-    
+
+
     st.markdown("""
     <div class="main-header">
         <h1> SurgiVision</h1>
@@ -659,7 +600,7 @@ def main():
 
     detector, model_loaded = load_anomaly_detector()
     if not model_loaded:
-        st.error("Model not found. Please ensure the trained model exists at ../models/best_spleen_3d_autoencoder.pth")
+        st.error(f"Model not found. Please ensure the trained model exists at {config.AUTOENCODER_PATH}")
         return
 
     st.sidebar.markdown("## Controls")
@@ -672,7 +613,7 @@ def main():
         p_series = st.text_input("Study/Series")
         p_ind = st.text_area("Clinical Indication / Notes")
     with st.sidebar.expander("Model Settings", True):
-        current_threshold = 0.015000
+        current_threshold = config.DEFAULT_THRESHOLD
         threshold = st.slider("Detection Sensitivity (threshold)", min_value=0.005, max_value=0.050, value=current_threshold, step=0.001, format="%.6f")
     demo_mode = st.sidebar.selectbox("Mode", ["Training Volume Test", "Upload Medical File", "Synthetic Pathology Demo"])
 
@@ -698,11 +639,14 @@ def main():
                     mask_path = detector.preprocessor.label_files[volume_index]
                     volume, mask = detector.preprocessor.preprocess_spleen_volume(volume_path, mask_path)
                     if volume is not None:
-                        spleen_volume = volume * (mask > 0)
+                        spleen_volume = inference.apply_spleen_mask(volume, mask)
                         fig_3d = create_3d_volume_plot(spleen_volume, f"Spleen Volume {volume_index+1}")
                         st.plotly_chart(fig_3d, use_container_width=True)
                         preview_img = slice_preview_from_volume(spleen_volume)
-                        heat_img = slice_preview_from_error(np.random.random((64,64,64))*0.001)
+                        _, error_map = inference.reconstruction_error_map(
+                            detector.model, spleen_volume, detector.device
+                        )
+                        heat_img = slice_preview_from_error(error_map)
                 with col2:
                     st.markdown("#### Analysis Details")
                     if volume is not None:
@@ -727,8 +671,11 @@ def main():
             type=['nii', 'nii.gz', 'gz', 'png', 'jpg', 'jpeg']
         )
         if uploaded_file is not None:
-            file_size = len(uploaded_file.getvalue()) / (1024*1024)
-            st.success(f"Uploaded: {uploaded_file.name} • {file_size:.1f} MB")
+            ok, msg = validate_upload(uploaded_file)
+            if not ok:
+                st.error(msg)
+                st.stop()
+            st.success(f"Uploaded: {uploaded_file.name} • {msg}")
             with st.spinner("AI analysis in progress..."):
                 if uploaded_file.name.lower().endswith(('.png', '.jpg', '.jpeg')):
                     result = process_2d_image(uploaded_file, detector, threshold)

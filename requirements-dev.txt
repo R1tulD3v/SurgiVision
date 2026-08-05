@@ -1,0 +1,8 @@
+# Development / CI dependencies (install on top of requirements.txt):
+#   pip install -r requirements.txt -r requirements-dev.txt
+
+pytest>=8.0           # test runner
+pytest-cov>=5.0       # coverage reporting
+ruff>=0.6             # linter + formatter
+mypy>=1.10            # static type checking
+pytest-playwright>=0.5  # browser-level E2E smoke tests (run: pytest tests/e2e)
