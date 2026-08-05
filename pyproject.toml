@@ -1,7 +1,7 @@
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-extend-exclude = ["models", "data", "results"]
+extend-exclude = ["models", "data", "results", "alembic", "unetpp_project"]
 
 [tool.ruff.lint]
 # Focused, high-signal rule set: pyflakes (F), import sorting (I),

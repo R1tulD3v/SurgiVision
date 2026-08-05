@@ -41,3 +41,37 @@ def synthetic_mask() -> np.ndarray:
     mask = np.zeros((64, 64, 64), dtype=np.float32)
     mask[20:40, 20:40, 20:40] = 1.0
     return mask
+
+
+@pytest.fixture
+def api_client(tmp_path):
+    """FastAPI TestClient backed by a throwaway SQLite database.
+
+    Overrides the ``get_session`` dependency so API/persistence tests need no
+    Postgres. Imports are lazy so the pure-unit tests don't require FastAPI.
+    """
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    import api
+    import db
+    import db_models  # noqa: F401  (registers models on Base.metadata)
+
+    url = f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    eng = create_engine(url, connect_args={"check_same_thread": False}, future=True)
+    db.Base.metadata.create_all(eng)
+    TestSession = sessionmaker(bind=eng, expire_on_commit=False)
+
+    def override_session():
+        session = TestSession()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    api.app.dependency_overrides[db.get_session] = override_session
+    try:
+        yield TestClient(api.app)
+    finally:
+        api.app.dependency_overrides.clear()

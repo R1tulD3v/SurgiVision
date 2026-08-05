@@ -22,7 +22,7 @@ jobs:
           python -m pip install --upgrade pip
           # CPU-only PyTorch keeps the job fast.
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install numpy scipy nibabel fastapi python-multipart
+          pip install numpy scipy nibabel fastapi python-multipart sqlalchemy alembic
           pip install -r requirements-dev.txt
 
       - name: Lint (ruff)

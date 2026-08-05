@@ -51,6 +51,14 @@ THRESHOLD_SIGMA: float = 3.0       # mean + k*std when calibrating on normal vol
 MIXED_TISSUE_THRESHOLD_MULTIPLIER: float = 5.0
 IMAGE_2D_THRESHOLD_MULTIPLIER: float = 10.0
 
+# --- Database ---
+# Defaults to a local SQLite file; set SURGIVISION_DATABASE_URL to a Postgres
+# URL in production, e.g. postgresql+psycopg://user:pass@host:5432/surgivision
+DATABASE_URL: str = os.environ.get(
+    "SURGIVISION_DATABASE_URL",
+    f"sqlite:///{(REPO_ROOT / 'surgivision.db').as_posix()}",
+)
+
 # --- Reproducibility ---
 RANDOM_SEED: int = 42
 
