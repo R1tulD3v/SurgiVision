@@ -20,6 +20,11 @@ fastapi>=0.110        # REST inference service (api.py)
 uvicorn>=0.29         # ASGI server to run the API
 python-multipart>=0.0.9  # multipart/form-data file uploads for FastAPI
 
+# --- Persistence ---
+sqlalchemy>=2.0       # ORM / analysis history + audit
+alembic>=1.13         # database schema migrations
+psycopg[binary]>=3.1  # PostgreSQL driver (production; SQLite is the local default)
+
 # --- Web demo / visualization ---
 streamlit>=1.36       # interactive demo UI
 plotly>=5.22          # interactive 3D / heatmap plots

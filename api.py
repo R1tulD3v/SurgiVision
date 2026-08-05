@@ -15,21 +15,36 @@ results without a mask are coarser than the mask-based pipeline.
 """
 from __future__ import annotations
 
+import datetime as dt
 import os
 import tempfile
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from typing import Optional
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 import config
 import inference
+from db import get_session, init_db
+from db_models import AnalysisRecord
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Create tables on startup (safe no-op if they already exist).
+    init_db()
+    yield
+
 
 app = FastAPI(
     title="SurgiVision API",
     version="1.0.0",
     description="Unsupervised spleen-CT anomaly detection (3D autoencoder).",
+    lifespan=lifespan,
 )
 
 
@@ -38,6 +53,8 @@ class HealthResponse(BaseModel):
 
 
 class ModelInfo(BaseModel):
+    # allow field names starting with "model_" (pydantic protects that namespace)
+    model_config = ConfigDict(protected_namespaces=())
     model_available: bool
     model_path: str
     target_size: list[int]
@@ -50,6 +67,19 @@ class PredictResponse(BaseModel):
     reconstruction_error: float
     threshold: float
     pipeline: str
+
+
+class AnalysisOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+    id: int
+    created_at: dt.datetime
+    filename: str
+    pipeline: str
+    reconstruction_error: float
+    threshold: float
+    confidence: float
+    is_anomaly: bool
+    model_version: Optional[str] = None
 
 
 @lru_cache(maxsize=1)
@@ -94,6 +124,7 @@ async def predict(
     file: UploadFile = File(...),
     threshold: Optional[float] = Form(default=None),
     model=Depends(get_model),
+    session: Session = Depends(get_session),
 ):
     """Run anomaly detection on an uploaded NIfTI CT volume."""
     name = (file.filename or "").lower()
@@ -127,6 +158,20 @@ async def predict(
     base = threshold if threshold is not None else config.DEFAULT_THRESHOLD
     effective = base * config.MIXED_TISSUE_THRESHOLD_MULTIPLIER
     decision = inference.decide_anomaly(error, effective)
+
+    # Persist the analysis (history + audit trail).
+    record = AnalysisRecord(
+        filename=file.filename or "upload",
+        pipeline="no_mask_raw_volume",
+        reconstruction_error=error,
+        threshold=effective,
+        confidence=decision["confidence"],
+        is_anomaly=decision["is_anomaly"],
+        model_version=config.AUTOENCODER_PATH.name,
+    )
+    session.add(record)
+    session.commit()
+
     return PredictResponse(
         is_anomaly=decision["is_anomaly"],
         confidence=decision["confidence"],
@@ -134,3 +179,25 @@ async def predict(
         threshold=effective,
         pipeline="no_mask_raw_volume",
     )
+
+
+@app.get("/api/v1/analyses", response_model=list[AnalysisOut], tags=["history"])
+def list_analyses(
+    limit: int = Query(default=20, ge=1, le=200),
+    session: Session = Depends(get_session),
+):
+    """Most recent analyses, newest first."""
+    stmt = (
+        select(AnalysisRecord)
+        .order_by(AnalysisRecord.created_at.desc(), AnalysisRecord.id.desc())
+        .limit(limit)
+    )
+    return session.execute(stmt).scalars().all()
+
+
+@app.get("/api/v1/analyses/{analysis_id}", response_model=AnalysisOut, tags=["history"])
+def get_analysis(analysis_id: int, session: Session = Depends(get_session)):
+    row = session.get(AnalysisRecord, analysis_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    return row

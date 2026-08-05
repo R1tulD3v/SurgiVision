@@ -125,6 +125,8 @@ uvicorn api:app --reload --port 8000
 | `GET /healthz` | liveness probe (no model needed) |
 | `GET /api/v1/model` | model availability + active config |
 | `POST /api/v1/predict` | upload a NIfTI CT volume → JSON anomaly result |
+| `GET /api/v1/analyses` | recent analyses (history / audit trail) |
+| `GET /api/v1/analyses/{id}` | one analysis by id |
 
 Example:
 ```bash
@@ -133,6 +135,22 @@ curl -F "file=@scan.nii.gz" -F "threshold=0.015" http://127.0.0.1:8000/api/v1/pr
 Returns `503` until a trained model is present. `/predict` currently uses the
 mask-free raw-volume heuristic (see **Limitations**); automatic spleen
 segmentation is the planned upgrade.
+
+### Database & persistence
+
+Every prediction is persisted (history + audit trail). The store is configured
+by `SURGIVISION_DATABASE_URL` — a local SQLite file by default, PostgreSQL in
+production. Schema is managed with **Alembic**:
+
+```bash
+alembic upgrade head          # create/upgrade the schema
+```
+
+Run the API with Postgres via Docker Compose:
+```bash
+docker compose up --build     # starts Postgres + the API on :8000
+```
+(The trained model is mounted from `./models`, not baked into the image.)
 
 ## Run the tests
 

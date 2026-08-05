@@ -1,21 +1,16 @@
-"""Tests for the FastAPI inference service (api.py), via Starlette's TestClient."""
+"""Tests for the FastAPI inference service (api.py), via Starlette's TestClient.
+
+Uses the shared ``api_client`` fixture (temp SQLite DB) from conftest.
+"""
 import os
 import tempfile
 
 import numpy as np
 import pytest
-from fastapi.testclient import TestClient
 
 import api
 import config
 from spleen_3d_model import Spleen3DAutoencoder
-
-
-@pytest.fixture
-def client():
-    c = TestClient(api.app)
-    yield c
-    api.app.dependency_overrides.clear()
 
 
 def _inject_untrained_model():
@@ -36,14 +31,14 @@ def _nifti_bytes(nib, volume):
             os.unlink(path)
 
 
-def test_healthz(client):
-    r = client.get("/healthz")
+def test_healthz(api_client):
+    r = api_client.get("/healthz")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
 
 
-def test_model_info(client):
-    r = client.get("/api/v1/model")
+def test_model_info(api_client):
+    r = api_client.get("/api/v1/model")
     assert r.status_code == 200
     body = r.json()
     assert body["target_size"] == list(config.TARGET_SIZE)
@@ -51,28 +46,28 @@ def test_model_info(client):
     assert isinstance(body["model_available"], bool)
 
 
-def test_predict_returns_503_without_model(client):
+def test_predict_returns_503_without_model(api_client):
     # No checkpoint in the test environment -> the dependency yields 503.
     files = {"file": ("scan.nii.gz", b"irrelevant", "application/gzip")}
-    r = client.post("/api/v1/predict", files=files)
+    r = api_client.post("/api/v1/predict", files=files)
     assert r.status_code == 503
 
 
-def test_predict_rejects_unsupported_extension(client):
+def test_predict_rejects_unsupported_extension(api_client):
     _inject_untrained_model()
     files = {"file": ("scan.txt", b"hello", "text/plain")}
-    r = client.post("/api/v1/predict", files=files)
+    r = api_client.post("/api/v1/predict", files=files)
     assert r.status_code == 415
 
 
-def test_predict_happy_path(client):
+def test_predict_happy_path(api_client):
     nib = pytest.importorskip("nibabel")  # skipped in minimal CI without nibabel
     _inject_untrained_model()
     volume = (np.random.default_rng(0).random((40, 40, 30)).astype(np.float32) * 400 - 100)
     payload = _nifti_bytes(nib, volume)
 
     files = {"file": ("scan.nii", payload, "application/octet-stream")}
-    r = client.post("/api/v1/predict", data={"threshold": "0.02"}, files=files)
+    r = api_client.post("/api/v1/predict", data={"threshold": "0.02"}, files=files)
 
     assert r.status_code == 200, r.text
     body = r.json()
