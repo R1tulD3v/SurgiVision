@@ -20,11 +20,11 @@ and an interactive Streamlit demo that produces a downloadable PDF report.
 
 This project is an honest work-in-progress. Known limitations:
 
-- **Inference currently depends on a spleen segmentation mask.** The main detection
-  path zeroes out non-spleen voxels using the dataset's ground-truth label. On a
-  truly unseen scan you would not have that mask, so an automated segmentation step
-  (e.g. MONAI) is required to make this genuinely end-to-end. *(Planned — see the
-  roadmap.)*
+- **Mask-free inference via MONAI (implemented).** The API's `/predict` auto-segments
+  the spleen with a pretrained MONAI UNet, then runs the mask-based pipeline — so it
+  works on raw uploads (it no longer over-flags whole-abdomen scans). If the
+  segmentation weights are absent it falls back to a coarse heuristic. The Streamlit
+  "Training Volume Test" mode still uses the dataset's ground-truth masks.
 - **Evaluation uses synthetic anomalies.** Pathologies are simulated by intensity
   manipulation, and the decision threshold is calibrated on normal training volumes.
   Reported metrics are therefore optimistic and should be treated as a sanity check,
@@ -132,9 +132,17 @@ Example:
 ```bash
 curl -F "file=@scan.nii.gz" -F "threshold=0.015" http://127.0.0.1:8000/api/v1/predict
 ```
-Returns `503` until a trained model is present. `/predict` currently uses the
-mask-free raw-volume heuristic (see **Limitations**); automatic spleen
-segmentation is the planned upgrade.
+Returns `503` until a trained model is present.
+
+**Automatic spleen segmentation.** `/predict` prefers the MONAI segmentation
+pipeline (auto spleen mask → reliable mask-based reconstruction). Fetch the
+weights once and point the app at them:
+```bash
+python -m monai.bundle download --name spleen_ct_segmentation --bundle_dir ./bundles
+export SURGIVISION_SEGMENTATION_MODEL_PATH=./bundles/spleen_ct_segmentation/models/model.pt
+```
+Without them, `/predict` falls back to the coarse mask-free heuristic
+(`pipeline` in the response says which was used).
 
 ### Database & persistence
 

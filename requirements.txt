@@ -29,6 +29,9 @@ psycopg[binary]>=3.1  # PostgreSQL driver (production; SQLite is the local defau
 streamlit>=1.36       # interactive demo UI
 plotly>=5.22          # interactive 3D / heatmap plots
 
+# --- Segmentation (mask-free inference on raw uploads) ---
+monai>=1.3            # pretrained spleen UNet (auto spleen localization)
+
 # --- Reporting ---
 reportlab>=4.1        # PDF report generation
 

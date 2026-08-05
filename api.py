@@ -102,6 +102,53 @@ def get_model():
         )
 
 
+@lru_cache(maxsize=1)
+def _load_segmenter_cached():
+    from segmentation import SpleenSegmenter
+
+    return SpleenSegmenter()
+
+
+def get_segmenter():
+    """Return the MONAI spleen segmenter, or None if unavailable.
+
+    Unavailable = MONAI not installed or the segmentation weights are missing.
+    In that case ``/predict`` falls back to the coarse mask-free heuristic.
+    """
+    try:
+        return _load_segmenter_cached()
+    except Exception:
+        return None
+
+
+def _infer_from_nifti(model, tmp_path: str, base_threshold: float):
+    """Return ``(error, effective_threshold, pipeline)`` for a NIfTI on disk.
+
+    Prefers the MONAI-segmentation pipeline (auto spleen mask → mask-based
+    reconstruction, reliable on raw uploads). Falls back to the mask-free
+    heuristic (coarser; higher threshold) when segmentation is unavailable or
+    finds no spleen.
+    """
+    segmenter = get_segmenter()
+    if segmenter is not None:
+        try:
+            mask, hu = segmenter.segment(tmp_path)
+            volume, mask64 = inference.crop_and_resize_to_spleen(hu, mask)
+            if volume is not None:
+                masked = inference.apply_spleen_mask(volume, mask64)
+                error = inference.reconstruction_error(model, masked)
+                return error, base_threshold, "monai_segmentation"
+        except Exception:
+            pass  # fall through to the heuristic
+
+    import nibabel as nib
+
+    volume_data = nib.load(tmp_path).get_fdata()
+    volume = inference.preprocess_raw_volume(volume_data)
+    error = inference.reconstruction_error(model, volume)
+    return error, base_threshold * config.MIXED_TISSUE_THRESHOLD_MULTIPLIER, "no_mask_raw_volume"
+
+
 @app.get("/healthz", response_model=HealthResponse, tags=["meta"])
 def healthz():
     """Liveness probe — does not require a model."""
@@ -137,8 +184,7 @@ async def predict(
             status_code=413, detail=f"File exceeds the {config.MAX_UPLOAD_MB} MB limit."
         )
 
-    import nibabel as nib  # imported lazily so the module loads without nibabel
-
+    base = threshold if threshold is not None else config.DEFAULT_THRESHOLD
     suffix = ".nii.gz" if name.endswith(".nii.gz") else ".nii"
     tmp_path = None
     try:
@@ -146,23 +192,19 @@ async def predict(
             tmp.write(data)
             tmp_path = tmp.name
         try:
-            volume_data = nib.load(tmp_path).get_fdata()
+            error, effective, pipeline = _infer_from_nifti(model, tmp_path, base)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Could not read NIfTI volume: {exc}")
+            raise HTTPException(status_code=400, detail=f"Could not process volume: {exc}")
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
-    volume = inference.preprocess_raw_volume(volume_data)
-    error, _ = inference.reconstruction_error_map(model, volume)
-    base = threshold if threshold is not None else config.DEFAULT_THRESHOLD
-    effective = base * config.MIXED_TISSUE_THRESHOLD_MULTIPLIER
     decision = inference.decide_anomaly(error, effective)
 
     # Persist the analysis (history + audit trail).
     record = AnalysisRecord(
         filename=file.filename or "upload",
-        pipeline="no_mask_raw_volume",
+        pipeline=pipeline,
         reconstruction_error=error,
         threshold=effective,
         confidence=decision["confidence"],
@@ -177,7 +219,7 @@ async def predict(
         confidence=decision["confidence"],
         reconstruction_error=error,
         threshold=effective,
-        pipeline="no_mask_raw_volume",
+        pipeline=pipeline,
     )
 
 

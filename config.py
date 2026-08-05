@@ -36,6 +36,11 @@ AUTOENCODER_PATH: Path = _path_from_env(
 HYBRID_MODEL_PATH: Path = _path_from_env(
     "SURGIVISION_HYBRID_MODEL_PATH", MODELS_DIR / "best_hybrid_detector.pth"
 )
+# MONAI pretrained spleen segmentation weights (UNet). Enables mask-free
+# inference on raw uploads; if absent, the API falls back to the coarse heuristic.
+SEGMENTATION_MODEL_PATH: Path = _path_from_env(
+    "SURGIVISION_SEGMENTATION_MODEL_PATH", MODELS_DIR / "spleen_ct_segmentation.pt"
+)
 
 # --- Preprocessing constants ---
 TARGET_SIZE: tuple[int, int, int] = (64, 64, 64)  # volume size fed to the model

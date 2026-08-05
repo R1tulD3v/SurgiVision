@@ -80,6 +80,35 @@ def preprocess_raw_volume(
     return ndimage.zoom(cropped, zoom, order=1).astype(np.float32)
 
 
+def crop_and_resize_to_spleen(
+    volume_hu: np.ndarray,
+    mask: np.ndarray,
+    target_size: tuple[int, int, int] = config.TARGET_SIZE,
+) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    """Crop a HU volume to the spleen-mask bounding box and resize to target_size.
+
+    Mirrors the training preprocessing but accepts an arbitrary mask (e.g. a
+    segmenter's prediction), so mask-free uploads can use the reliable
+    mask-based pipeline. Returns ``(norm_volume, resized_mask)`` in ``[0,1]``,
+    or ``(None, None)`` if the mask is empty.
+    """
+    from scipy import ndimage
+
+    coords = np.where(mask > 0)
+    if coords[0].size == 0:
+        return None, None
+    x0, x1 = max(0, coords[0].min() - 10), min(volume_hu.shape[0], coords[0].max() + 10)
+    y0, y1 = max(0, coords[1].min() - 10), min(volume_hu.shape[1], coords[1].max() + 10)
+    z0, z1 = max(0, coords[2].min() - 5), min(volume_hu.shape[2], coords[2].max() + 5)
+    cropped = volume_hu[x0:x1, y0:y1, z0:z1]
+    cropped_mask = mask[x0:x1, y0:y1, z0:z1].astype(np.float32)
+    norm = normalize_hu(cropped)
+    zoom = [target_size[i] / norm.shape[i] for i in range(3)]
+    vol = ndimage.zoom(norm, zoom, order=1).astype(np.float32)
+    resized_mask = ndimage.zoom(cropped_mask, zoom, order=0)
+    return vol, resized_mask
+
+
 def to_model_tensor(masked_volume: np.ndarray, device: torch.device) -> torch.Tensor:
     """Convert a ``[D, H, W]`` array to a ``[1, 1, D, H, W]`` float tensor."""
     return torch.as_tensor(
