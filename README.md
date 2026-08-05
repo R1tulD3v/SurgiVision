@@ -111,6 +111,29 @@ python training_pipeline.py        # writes models/best_spleen_3d_autoencoder.pt
 streamlit run streamlit_universal_demo.py
 ```
 
+## Run the API
+
+A FastAPI service ([`api.py`](api.py)) exposes the detector over HTTP:
+
+```bash
+uvicorn api:app --reload --port 8000
+# interactive docs (Swagger UI): http://127.0.0.1:8000/docs
+```
+
+| Method & path | Purpose |
+|---------------|---------|
+| `GET /healthz` | liveness probe (no model needed) |
+| `GET /api/v1/model` | model availability + active config |
+| `POST /api/v1/predict` | upload a NIfTI CT volume → JSON anomaly result |
+
+Example:
+```bash
+curl -F "file=@scan.nii.gz" -F "threshold=0.015" http://127.0.0.1:8000/api/v1/predict
+```
+Returns `503` until a trained model is present. `/predict` currently uses the
+mask-free raw-volume heuristic (see **Limitations**); automatic spleen
+segmentation is the planned upgrade.
+
 ## Run the tests
 
 ```bash

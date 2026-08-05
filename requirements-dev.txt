@@ -6,3 +6,4 @@ pytest-cov>=5.0       # coverage reporting
 ruff>=0.6             # linter + formatter
 mypy>=1.10            # static type checking
 pytest-playwright>=0.5  # browser-level E2E smoke tests (run: pytest tests/e2e)
+httpx>=0.27           # required by FastAPI's TestClient (tests/test_api.py)
